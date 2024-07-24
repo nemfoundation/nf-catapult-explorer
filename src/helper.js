@@ -562,16 +562,37 @@ class helper {
 	/**
 	 * To resolved unresolvedMosaicId.
 	 * @param {NamespaceId | MosaicId} unresolvedMosaicId - NamespaceId | MosaicId
+	 * @param {object | undefined} transactionLocation Location of transaction for which to perform the resolution.
 	 * @returns {MosaicId} MosaicId
 	 */
-	static resolveMosaicId = async unresolvedMosaicId => {
-		if (!(unresolvedMosaicId instanceof NamespaceId))
+	static resolveMosaicId = async (unresolvedMosaicId, transactionLocation = undefined) => {
+		if (0n === (BigInt(`0x${unresolvedMosaicId.id.toHex()}`) & (1n << 63n)))
 			return unresolvedMosaicId;
 
 		if (unresolvedMosaicId.id.toHex() === http.networkCurrency.namespaceId)
 			return new MosaicId(http.networkCurrency.mosaicId);
 
-		return await NamespaceService.getLinkedMosaicId(unresolvedMosaicId);
+		if (!transactionLocation)
+			return await NamespaceService.getLinkedMosaicId(unresolvedMosaicId);
+
+		const searchCriteria = {
+			height: UInt64.fromUint(transactionLocation.height)
+		};
+
+		const mosaicResolutionStatements =
+			await ReceiptService.searchMosaicResolutionStatements(searchCriteria);
+
+		const isReceiptSourceLessThanEqual = (lhs, rhs) =>
+			lhs.primaryId < rhs.primaryId || (lhs.primaryId === rhs.primaryId && lhs.secondaryId <= rhs.secondaryId);
+
+		for (const statement of mosaicResolutionStatements.data) {
+			if (statement.unresolved === unresolvedMosaicId.id.toHex()) {
+				for (const entry of statement.resolutionEntries) {
+					if (isReceiptSourceLessThanEqual(entry.source, transactionLocation))
+						return entry.resolved;
+				}
+			}
+		}
 	};
 
 	/**
@@ -771,22 +792,65 @@ class helper {
 		return 1 === pageNumber ? 0 : (pageNumber - 1) * pageSize;
 	};
 
-	static getTransactionMosaicInfoAndNamespace = async transactions => {
+	static getTransactionMosaicInfoAndNamespace = async transactionObject => {
 		const unresolvedMosaics = [];
 
-		// collect unresolved mosaics from transactions
-		transactions.map(transactionDTO => {
-			switch (transactionDTO.type) {
+		const makeTransactionLocation = (transactionInfo, secondaryId = undefined) => {
+			if (!transactionInfo?.height)
+				return undefined;
+
+			return {
+				height: transactionInfo.height,
+				primaryId: transactionInfo.index + 1,
+				secondaryId: undefined === secondaryId ? 0 : secondaryId
+			};
+		};
+
+		const addUnresolvedMosaic = (mosaicId, transactionLocation) => {
+			unresolvedMosaics.push({
+				mosaicId,
+				transactionLocation
+			});
+		};
+
+		const processTransaction = (transaction, transactionLocation) => {
+			switch (transaction.type) {
 			case TransactionType.TRANSFER:
-				unresolvedMosaics.push(...transactionDTO.mosaics);
-				return;
+				transaction.mosaics.forEach(mosaic => {
+					addUnresolvedMosaic(mosaic.id, transactionLocation);
+				});
+				break;
+			case TransactionType.MOSAIC_METADATA:
+				addUnresolvedMosaic(transaction.targetMosaicId, transactionLocation);
+				break;
+			case TransactionType.MOSAIC_DEFINITION:
+			case TransactionType.MOSAIC_SUPPLY_CHANGE:
+				addUnresolvedMosaic(transaction.mosaicId, transactionLocation);
+				break;
 			case TransactionType.MOSAIC_SUPPLY_REVOCATION:
 			case TransactionType.HASH_LOCK:
 			case TransactionType.SECRET_LOCK:
-				unresolvedMosaics.push(transactionDTO.mosaic);
-				return;
+				addUnresolvedMosaic(transaction.mosaic.id, transactionLocation);
+				break;
 			}
-		});
+		};
+
+		if (transactionObject.innerTransactions) {
+			transactionObject.innerTransactions.forEach(innerTx => {
+				processTransaction(
+					innerTx,
+					makeTransactionLocation(
+						transactionObject.transactionInfo,
+						innerTx.transactionInfo.index + 1
+					)
+				);
+			});
+		} else {
+			processTransaction(
+				transactionObject,
+				makeTransactionLocation(transactionObject.transactionInfo)
+			);
+		}
 
 		return await helper.getMosaicInfoAndNamespace(unresolvedMosaics);
 	};
@@ -795,17 +859,16 @@ class helper {
 		const unresolvedMosaicsMap = {};
 
 		// create resolved mosaic mapping
-		const resolvedMosaics = await Promise.all(unresolvedMosaics.map(async mosaic => {
-			const resolvedMosaicId = await helper.resolveMosaicId(mosaic.id);
+		const resolvedMosaics = await Promise.all(unresolvedMosaics.map(async ({mosaicId, transactionLocation}) => {
+			const resolvedMosaicId = await helper.resolveMosaicId(mosaicId, transactionLocation);
 
-			unresolvedMosaicsMap[mosaic.id.toHex()] = resolvedMosaicId.toHex();
+			unresolvedMosaicsMap[mosaicId.toHex()] = resolvedMosaicId.toHex();
 
 			return resolvedMosaicId;
 		}));
 
 		// skip networkCurrency mosaic
 		const resolvedMosaicIds = resolvedMosaics
-			.map(mosaic => mosaic.id)
 			.filter(mosaicId => mosaicId.toHex() !== http.networkCurrency.mosaicId);
 
 		// filter duplicated mosaic id
