@@ -6,7 +6,10 @@ class ReceiptExtractor {
 	static balanceChangeReceipt = async transactionStatement => {
 		let balanceChangeReceipt = [];
 
-		const mosaics = transactionStatement.map(statement => new Mosaic(statement.mosaicId, statement.amount));
+		const mosaics = transactionStatement.map(statement => ({
+			mosaicId: statement.mosaicId,
+			transactionLocation: undefined
+		}));
 
 		const { mosaicInfos, mosaicNames, unresolvedMosaicsMap } =
 			await helper.getMosaicInfoAndNamespace(mosaics);
