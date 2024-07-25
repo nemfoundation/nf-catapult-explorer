@@ -681,9 +681,13 @@ class TransactionService {
 		case TransactionType.MOSAIC_ALIAS:
 			return CreateTransaction.mosaicAlias(transactionObj);
 		case TransactionType.MOSAIC_DEFINITION:
-			return CreateTransaction.mosaicDefinition(transactionObj);
+			return CreateTransaction.mosaicDefinition(transactionObj, {
+				unresolvedMosaicsMap
+			});
 		case TransactionType.MOSAIC_SUPPLY_CHANGE:
-			return CreateTransaction.mosaicSupplyChange(transactionObj);
+			return CreateTransaction.mosaicSupplyChange(transactionObj, {
+				unresolvedMosaicsMap
+			});
 		case TransactionType.MOSAIC_SUPPLY_REVOCATION:
 			return CreateTransaction.mosaicSupplyRevocation(transactionObj, {
 				mosaicInfos,
@@ -713,13 +717,19 @@ class TransactionService {
 		case TransactionType.ACCOUNT_OPERATION_RESTRICTION:
 			return CreateTransaction.accountOperationRestriction(transactionObj);
 		case TransactionType.MOSAIC_ADDRESS_RESTRICTION:
-			return CreateTransaction.mosaicAddressRestriction(transactionObj);
+			return CreateTransaction.mosaicAddressRestriction(transactionObj, {
+				mosaicNames,
+				unresolvedMosaicsMap
+			});
 		case TransactionType.MOSAIC_GLOBAL_RESTRICTION:
 			return CreateTransaction.mosaicGlobalRestriction(transactionObj);
 		case TransactionType.ACCOUNT_METADATA:
 			return CreateTransaction.accountMetadata(transactionObj);
 		case TransactionType.MOSAIC_METADATA:
-			return CreateTransaction.mosaicMetadata(transactionObj);
+			return CreateTransaction.mosaicMetadata(transactionObj, {
+				mosaicNames,
+				unresolvedMosaicsMap
+			});
 		case TransactionType.NAMESPACE_METADATA:
 			return CreateTransaction.namespaceMetadata(transactionObj);
 		case TransactionType.VOTING_KEY_LINK:
@@ -746,7 +756,7 @@ class TransactionService {
 			transactionDTO.type === TransactionType.AGGREGATE_COMPLETE
 		) {
 			const { mosaicInfos, mosaicNames, unresolvedMosaicsMap } =
-				await helper.getTransactionMosaicInfoAndNamespace(transactionDTO.innerTransactions);
+				await helper.getTransactionMosaicInfoAndNamespace(transactionDTO);
 
 			const innerTransactions = transactionDTO.innerTransactions
 				? await Promise.all(transactionDTO.innerTransactions.map(async (transaction, index) => {
@@ -783,7 +793,7 @@ class TransactionService {
 			};
 		} else {
 			const { mosaicInfos, mosaicNames, unresolvedMosaicsMap } =
-				await helper.getTransactionMosaicInfoAndNamespace([transactionDTO]);
+				await helper.getTransactionMosaicInfoAndNamespace(transactionDTO);
 
 			return this.createStandaloneTransactionFromSDK(transactionDTO, {
 				mosaicInfos,

@@ -1,9 +1,9 @@
 import Helper from '../../src/helper';
-import { LockService, TransactionService } from '../../src/infrastructure';
+import { CreateTransaction, LockService, TransactionService } from '../../src/infrastructure';
 import http from '../../src/infrastructure/http';
 import TestHelper from '../TestHelper';
 import { restore, stub } from 'sinon';
-import { MosaicId, TransactionGroup, UInt64 } from 'symbol-sdk';
+import { Account, MosaicId, NetworkType, TransactionGroup, UInt64 } from 'symbol-sdk';
 
 describe('Transaction Service', () => {
 	afterEach(restore);
@@ -318,6 +318,72 @@ describe('Transaction Service', () => {
 					mosaicId: '6BED913FA20223F8',
 					rawAmount: UInt64.fromUint(10)
 				}]
+			});
+		});
+	});
+
+	describe('createStandaloneTransactionFromSDK', () => {
+		const commonTransactionDTO = {
+			deadline: {
+				adjustedValue: 8266897456
+			},
+			maxFee: UInt64.fromUint(1000000),
+			signer: {
+				address: Account.generateNewAccount(NetworkType.TEST_NET).address
+			},
+			transactionInfo: {}
+		};
+
+		const assertTransactionCreation = async (transactionType, transactionTypeName, expectedParams) => {
+			// Arrange:
+			const mockTransactionDTO = {
+				...commonTransactionDTO,
+				type: transactionType
+			};
+
+			jest.spyOn(CreateTransaction, transactionTypeName).mockResolvedValue();
+
+			// Act:
+			await TransactionService.createStandaloneTransactionFromSDK(mockTransactionDTO, {
+				mosaicInfos: [],
+				mosaicNames: [],
+				unresolvedMosaicsMap: {}
+			});
+
+			// Assert:
+			expect(CreateTransaction[transactionTypeName]).toHaveBeenCalledWith({
+				deadline: 1646115744,
+				maxFee: '1.000000',
+				signer: mockTransactionDTO.signer.address.plain(),
+				transactionInfo: {},
+				transactionType: transactionType,
+				type: transactionType
+			}, expectedParams);
+		};
+
+		it('called mosaic definition', async () => {
+			await assertTransactionCreation(16717, 'mosaicDefinition', {
+				unresolvedMosaicsMap: {}
+			});
+		});
+
+		it('called mosaic supply change', async () => {
+			await assertTransactionCreation(16973, 'mosaicSupplyChange', {
+				unresolvedMosaicsMap: {}
+			});
+		});
+
+		it('called mosaic address restriction', async () => {
+			await assertTransactionCreation(16977, 'mosaicAddressRestriction', {
+				mosaicNames: [],
+				unresolvedMosaicsMap: {}
+			});
+		});
+
+		it('called mosaic metadata', async () => {
+			await assertTransactionCreation(16964, 'mosaicMetadata', {
+				mosaicNames: [],
+				unresolvedMosaicsMap: {}
 			});
 		});
 	});
