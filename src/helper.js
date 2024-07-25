@@ -823,6 +823,7 @@ class helper {
 			case TransactionType.MOSAIC_METADATA:
 				addUnresolvedMosaic(transaction.targetMosaicId, transactionLocation);
 				break;
+			case TransactionType.MOSAIC_ADDRESS_RESTRICTION:
 			case TransactionType.MOSAIC_DEFINITION:
 			case TransactionType.MOSAIC_SUPPLY_CHANGE:
 				addUnresolvedMosaic(transaction.mosaicId, transactionLocation);
