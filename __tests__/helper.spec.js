@@ -1,6 +1,6 @@
 import TestHelper from './TestHelper';
 import Helper from '../src/helper';
-import { MosaicService, NamespaceService } from '../src/infrastructure';
+import { MosaicService, NamespaceService, ReceiptService } from '../src/infrastructure';
 import http from '../src/infrastructure/http';
 import { restore, stub } from 'sinon';
 import { Mosaic, MosaicId, NamespaceId, NamespaceName, UInt64 } from 'symbol-sdk';
@@ -219,6 +219,44 @@ describe('Helper', () => {
 			expect(result).toStrictEqual(new MosaicId(mockTestMosaic.idHex));
 			expect(stubGetLinkedMosaicId.callCount).toBe(1);
 		});
+
+		it('returns mosaic id and called mosaic statement query', async () => {
+			// Arrange:
+			const mockNamespaceId = new NamespaceId(mockTestMosaic.namespaceName);
+
+			const stubSearchMosaicResolutionStatements = jest.spyOn(ReceiptService, 'searchMosaicResolutionStatements')
+				.mockReturnValue(Promise.resolve({
+					data: [{
+						height: UInt64.fromUint(10),
+						mosaicResolutionEntries: ['22D2D90A27738AA0'],
+						resolutionEntries: [
+							{
+								resolved: new MosaicId('22D2D90A27738AA0'),
+								source: {
+									primaryId: 0,
+									secondaryId: 0
+								}
+							}
+						],
+						resolutionType: 'Mosaic',
+						unresolved: 'C6D6C5A3883DF4F4'
+					}]
+				}));
+
+			// Act:
+			const result = await Helper.resolveMosaicId(mockNamespaceId, {
+				height: UInt64.fromUint(10),
+				primaryId: 1,
+				secondaryId: 0
+			});
+
+			// Assert:
+			expect(result).toStrictEqual(new MosaicId('22D2D90A27738AA0'));
+			expect(stubGetLinkedMosaicId.callCount).toBe(0);
+			expect(stubSearchMosaicResolutionStatements).toHaveBeenCalledWith({
+				height: UInt64.fromUint(10)
+			});
+		});
 	});
 
 	describe('getNetworkCurrencyBalance', () => {
@@ -275,21 +313,19 @@ describe('Helper', () => {
 	describe('getTransactionMosaicInfoAndNamespace', () => {
 		it('returns mosaics mapping, empty mosaic info and namespace when transaction included network mosaic', async () => {
 			// Arrange:
-			const mockTransactions = [
-				{
-					...TestHelper.mockTransaction({
-						height: 1,
-						timestamp: 10
-					}),
-					mosaics: [
-						new Mosaic(new NamespaceId(http.networkCurrency.namespaceName), UInt64.fromUint(20)),
-						new Mosaic(new MosaicId(http.networkCurrency.mosaicId), UInt64.fromUint(1))
-					]
-				}
-			];
+			const mockTransactions = {
+				...TestHelper.mockTransaction({
+					height: 1,
+					timestamp: 10
+				}),
+				mosaics: [
+					new Mosaic(new NamespaceId(http.networkCurrency.namespaceName), UInt64.fromUint(20)),
+					new Mosaic(new MosaicId(http.networkCurrency.mosaicId), UInt64.fromUint(1))
+				]
+			};
 
 			// Act:
-			const { unresolvedMosaicsMap, mosaicInfos, mosaicNames} = await Helper.getTransactionMosaicInfoAndNamespace(mockTransactions);
+			const { unresolvedMosaicsMap, mosaicInfos, mosaicNames } = await Helper.getTransactionMosaicInfoAndNamespace(mockTransactions);
 
 			// Assert:
 			expect(unresolvedMosaicsMap).toStrictEqual({
@@ -302,27 +338,33 @@ describe('Helper', () => {
 
 		it('returns mosaics mapping, mosaic info and namespace when transaction exits', async () => {
 			// Arrange:
-			const mockTransactions = [
-				{
-					...TestHelper.mockTransaction({
-						height: 1,
-						timestamp: 10
-					}),
-					mosaics: [
-						new Mosaic(new NamespaceId(http.networkCurrency.namespaceName), UInt64.fromUint(20)),
-						new Mosaic(new MosaicId(http.networkCurrency.mosaicId), UInt64.fromUint(1))
-					]
+			const mockAggregateTransaction = {
+				transactionInfo: {
+					height: 10,
+					index: 1
 				},
-				TestHelper.mockLockFundsTransaction(),
-				TestHelper.mockMosaicSupplyRevocationTransaction(new Mosaic(
-					new MosaicId(mockTestMosaic.idHex),
-					UInt64.fromUint(1)
-				)),
-				TestHelper.mockSecretLockTransaction(new Mosaic(
-					new NamespaceId(mockTestSecretLockMosaic.namespaceName),
-					UInt64.fromUint(20)
-				))
-			];
+				innerTransactions: [
+					{
+						...TestHelper.mockTransaction({
+							height: 1,
+							timestamp: 10
+						}),
+						mosaics: [
+							new Mosaic(new NamespaceId(http.networkCurrency.namespaceName), UInt64.fromUint(20)),
+							new Mosaic(new MosaicId(http.networkCurrency.mosaicId), UInt64.fromUint(1))
+						]
+					},
+					TestHelper.mockLockFundsTransaction(),
+					TestHelper.mockMosaicSupplyRevocationTransaction(new Mosaic(
+						new MosaicId(mockTestMosaic.idHex),
+						UInt64.fromUint(1)
+					)),
+					TestHelper.mockSecretLockTransaction(new Mosaic(
+						new NamespaceId(mockTestSecretLockMosaic.namespaceName),
+						UInt64.fromUint(20)
+					))
+				]
+			};
 
 			const mockMosaicInfos = [
 				TestHelper.mockMosaicInfo(mockTestMosaic.idHex, 'TC46AZWUIZYZ2WVGLVEZYNZHSIFAD3AFDPUJMEA', 10, 0),
@@ -359,9 +401,27 @@ describe('Helper', () => {
 				.resolves(Promise.resolve(mockMosaicNames));
 
 			stub(NamespaceService, 'getLinkedMosaicId').resolves(Promise.resolve(new MosaicId(mockTestSecretLockMosaic.idHex)));
+			stub(ReceiptService, 'searchMosaicResolutionStatements').resolves(Promise.resolve({
+				data: [{
+					height: UInt64.fromUint(10),
+					mosaicResolutionEntries: ['22D2D90A27738AA0'],
+					resolutionEntries: [
+						{
+							resolved: new MosaicId('22D2D90A27738AA0'),
+							source: {
+								primaryId: 1,
+								secondaryId: 2
+							}
+						}
+					],
+					resolutionType: 'Mosaic',
+					unresolved: 'DEBBC3DA600F2B48'
+				}]
+			}));
 
 			// Act:
-			const { unresolvedMosaicsMap, mosaicInfos, mosaicNames} = await Helper.getTransactionMosaicInfoAndNamespace(mockTransactions);
+			const { unresolvedMosaicsMap, mosaicInfos, mosaicNames } =
+				await Helper.getTransactionMosaicInfoAndNamespace(mockAggregateTransaction);
 
 			// Assert:
 			expect(unresolvedMosaicsMap).toStrictEqual({
@@ -376,7 +436,7 @@ describe('Helper', () => {
 
 		it('returns empty when transactions empty', async () => {
 			// Arrange:
-			const transactions = [];
+			const transactions = {};
 
 			// Act:
 			const {mosaicInfos, mosaicNames, unresolvedMosaicsMap} = await Helper.getTransactionMosaicInfoAndNamespace(transactions);

@@ -511,7 +511,10 @@ class AccountService {
 
 		const accountSecretLocks = await LockService.searchSecretLocks(searchCriteria);
 
-		const mosaics = accountSecretLocks.data.map(secretlock => new Mosaic(secretlock.mosaicId, secretlock.amount));
+		const mosaics = accountSecretLocks.data.map(secretlock => ({
+			mosaicId: secretlock.mosaicId,
+			transactionLocation: undefined
+		}));
 
 		const { mosaicInfos, mosaicNames, unresolvedMosaicsMap } =
 			await helper.getMosaicInfoAndNamespace(mosaics);

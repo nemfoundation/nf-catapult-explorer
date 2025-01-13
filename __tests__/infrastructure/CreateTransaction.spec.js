@@ -8,6 +8,7 @@ import {
 	Convert,
 	Mosaic,
 	MosaicId,
+	MosaicNonce,
 	NamespaceId,
 	NamespaceName,
 	NetworkType,
@@ -70,11 +71,16 @@ describe('CreateTransaction', () => {
 			targetMosaicId: new MosaicId('7F2D26E89342D398')
 		};
 
-		const getMosaicAliasNamesStub = stub(Helper, 'getMosaicAliasNames');
-		getMosaicAliasNamesStub.returns(Promise.resolve(['N/A']));
-
 		// Act:
-		const mosaicMetadataObject = await CreateTransaction.mosaicMetadata(mockMosaicMetadata);
+		const mosaicMetadataObject = await CreateTransaction.mosaicMetadata(mockMosaicMetadata, {
+			mosaicNames: [{
+				names: [],
+				mosaicId: '7F2D26E89342D398'
+			}],
+			unresolvedMosaicsMap: {
+				'7F2D26E89342D398': '7F2D26E89342D398'
+			}
+		});
 
 		// Assert:
 		expect(mosaicMetadataObject.transactionBody).toEqual({
@@ -280,6 +286,116 @@ describe('CreateTransaction', () => {
 				mosaicId: '22D2D90A27738AA0',
 				rawAmount: UInt64.fromUint(20)
 			}]
+		});
+	});
+
+	it('returns mosaicDefinition', async () => {
+		// Arrange:
+		const mockMosaicDefinition = {
+			type: 16717,
+			network: 152,
+			version: 1,
+			mosaicId: new MosaicId('7F2D26E89342D398'),
+			divisibility: 0,
+			duration: UInt64.fromUint(1000),
+			nonce: MosaicNonce.createRandom(),
+			flags: {
+				supplyMutable: false,
+				transferable: true,
+				restrictable: true,
+				revokable: true
+			}
+		};
+
+		// Act:
+		const mosaicDefinitionObject = await CreateTransaction.mosaicDefinition(mockMosaicDefinition, {
+			unresolvedMosaicsMap: {
+				'7F2D26E89342D398': '7F2D26E89342D398'
+			}
+		});
+
+		// Assert:
+		expect(mosaicDefinitionObject.transactionBody).toEqual({
+			transactionType: mockMosaicDefinition.type,
+			recipient: 'TATYW7IJN2TDBINTESRU66HHS5HMC4YVW7GGDRA',
+			mosaicId: '7F2D26E89342D398',
+			divisibility: 0,
+			duration: 1000,
+			nonce: mockMosaicDefinition.nonce.toHex(),
+			supplyMutable: false,
+			transferable: true,
+			restrictable: true,
+			revokable: true
+		});
+	});
+
+	const assertMosaicSupplyChange = async (action, expectedAction) => {
+		// Arrange:
+		const mockMosaicSupplyChange = {
+			type: 16973,
+			mosaicId: new MosaicId('7F2D26E89342D398'),
+			action: action,
+			delta: UInt64.fromUint(100)
+		};
+
+		// Act:
+		const mosaicSupplyChangeObject = await CreateTransaction.mosaicSupplyChange(mockMosaicSupplyChange, {
+			unresolvedMosaicsMap: {
+				'7F2D26E89342D398': '7F2D26E89342D398'
+			}
+		});
+
+		// Assert:
+		expect(mosaicSupplyChangeObject.transactionBody).toEqual({
+			transactionType: mockMosaicSupplyChange.type,
+			mosaicId: '7F2D26E89342D398',
+			action: expectedAction,
+			delta: 100
+		});
+	};
+
+	it('returns mosaicSupplyChange in increase action', async () => {
+		await assertMosaicSupplyChange(1, 'Increase');
+	});
+
+	it('returns mosaicSupplyChange in decrease action', async () => {
+		await assertMosaicSupplyChange(0, 'Decrease');
+	});
+
+	it('returns mosaicAddressRestriction', async () => {
+		// Arrange:
+		const mockMosaicAddressRestriction = {
+			type: 16977,
+			mosaicId: new MosaicId('7F2D26E89342D398'),
+			targetAddress: randomAddress,
+			restrictionKey: UInt64.fromUint(1),
+			previousRestrictionValue: UInt64.fromUint(10),
+			newRestrictionValue: UInt64.fromUint(20),
+			transactionInfo: {
+				height: UInt64.fromUint(1)
+			}
+		};
+
+		// Act:
+		const mosaicAddressRestrictionObject = await CreateTransaction.mosaicAddressRestriction(mockMosaicAddressRestriction, {
+			mosaicNames: [{
+				names: [],
+				mosaicId: '7F2D26E89342D398'
+			}],
+			unresolvedMosaicsMap: {
+				'7F2D26E89342D398': '7F2D26E89342D398'
+			}
+		});
+
+		// Assert:
+		expect(mosaicAddressRestrictionObject.transactionBody).toEqual({
+			transactionType: mockMosaicAddressRestriction.type,
+			mosaicId: '7F2D26E89342D398',
+			mosaicAliasNames: ['N/A'],
+			targetAddress: randomAddress.plain(),
+			restrictionKey: '0000000000000001',
+			previousRestrictionValue: '10',
+			newRestrictionValue: '20'
 		});
 	});
 });

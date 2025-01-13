@@ -19,7 +19,7 @@
 import http from './http';
 import { Constants } from '../config';
 import helper from '../helper';
-import { NamespaceService } from '../infrastructure';
+import { MosaicService, NamespaceService } from '../infrastructure';
 import { Address, Convert, Mosaic, MosaicId } from 'symbol-sdk';
 
 class CreateTransaction {
@@ -116,15 +116,16 @@ class CreateTransaction {
 		};
 	};
 
-	static mosaicDefinition = async transactionObj => {
-		const resolvedMosaic = await helper.resolveMosaicId(transactionObj.mosaicId);
+	static mosaicDefinition = async (transactionObj, {
+		unresolvedMosaicsMap
+	}) => {
 
 		return {
 			...transactionObj,
 			transactionBody: {
 				transactionType: transactionObj.type,
 				recipient: http.networkConfig.MosaicRentalSinkAddress.address,
-				mosaicId: resolvedMosaic.toHex(),
+				mosaicId: unresolvedMosaicsMap[transactionObj.mosaicId.toHex()],
 				divisibility: transactionObj.divisibility,
 				duration: transactionObj.duration.compact(),
 				nonce: transactionObj.nonce.toHex(),
@@ -136,14 +137,14 @@ class CreateTransaction {
 		};
 	};
 
-	static mosaicSupplyChange = async transactionObj => {
-		const resolvedMosaic = await helper.resolveMosaicId(transactionObj.mosaicId);
-
+	static mosaicSupplyChange = async (transactionObj, {
+		unresolvedMosaicsMap
+	}) => {
 		return {
 			...transactionObj,
 			transactionBody: {
 				transactionType: transactionObj.type,
-				mosaicId: resolvedMosaic.toHex(),
+				mosaicId: unresolvedMosaicsMap[transactionObj.mosaicId.toHex()],
 				action: Constants.MosaicSupplyChangeAction[transactionObj.action],
 				delta: transactionObj.delta.compact()
 			}
@@ -331,23 +332,26 @@ class CreateTransaction {
 		};
 	};
 
-	static mosaicAddressRestriction = async transactionObj => {
+	static mosaicAddressRestriction = async (transactionObj, {
+		mosaicNames,
+		unresolvedMosaicsMap
+	}) => {
 		const { transactionInfo } = transactionObj;
-		const [resolvedMosaic, targetAddress] = await Promise.all([
-			helper.resolveMosaicId(transactionObj.mosaicId),
-			helper.resolvedAddress(
-				transactionObj.targetAddress,
-				transactionInfo.height
-			)
-		]);
 
-		const mosaicAliasNames = await helper.getMosaicAliasNames(resolvedMosaic);
+		const targetAddress = await helper.resolvedAddress(
+			transactionObj.targetAddress,
+			transactionInfo.height
+		);
+
+		const mosaicAliasNames = MosaicService.extractMosaicNamespace({
+			mosaicId: unresolvedMosaicsMap[transactionObj.mosaicId.toHex()]
+		},mosaicNames);
 
 		return {
 			...transactionObj,
 			transactionBody: {
 				transactionType: transactionObj.type,
-				mosaicId: resolvedMosaic.toHex(),
+				mosaicId: unresolvedMosaicsMap[transactionObj.mosaicId.toHex()],
 				mosaicAliasNames,
 				targetAddress: targetAddress,
 				restrictionKey: transactionObj.restrictionKey.toHex(),
@@ -404,24 +408,26 @@ class CreateTransaction {
 		};
 	};
 
-	static mosaicMetadata = async transactionObj => {
+	static mosaicMetadata = async (transactionObj, {
+		mosaicNames,
+		unresolvedMosaicsMap
+	}) => {
 		const { transactionInfo } = transactionObj;
-		const [resolvedMosaic, resolvedAddress] = await Promise.all([
-			helper.resolveMosaicId(transactionObj.targetMosaicId),
-			helper.resolvedAddress(
-				transactionObj.targetAddress,
-				transactionInfo.height
-			)
-		]);
+		const resolvedAddress = await helper.resolvedAddress(
+			transactionObj.targetAddress,
+			transactionInfo.height
+		);
 
-		const mosaicAliasNames = await helper.getMosaicAliasNames(resolvedMosaic);
+		const mosaicAliasNames = MosaicService.extractMosaicNamespace({
+			mosaicId: unresolvedMosaicsMap[transactionObj.targetMosaicId.toHex()]
+		}, mosaicNames);
 
 		return {
 			...transactionObj,
 			transactionBody: {
 				transactionType: transactionObj.type,
 				scopedMetadataKey: transactionObj.scopedMetadataKey.toHex(),
-				targetMosaicId: resolvedMosaic.toHex(),
+				targetMosaicId: unresolvedMosaicsMap[transactionObj.targetMosaicId.toHex()],
 				targetMosaicAliasNames: mosaicAliasNames,
 				targetAddress: resolvedAddress,
 				metadataValue: `${Convert.uint8ToHex(transactionObj.value)} (Text: ${Convert.uint8ToUtf8(transactionObj.value)})`,
