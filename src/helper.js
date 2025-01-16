@@ -795,16 +795,11 @@ class helper {
 	static getTransactionMosaicInfoAndNamespace = async transactionObject => {
 		const unresolvedMosaics = [];
 
-		const makeTransactionLocation = (transactionInfo, secondaryId = undefined) => {
-			if (!transactionInfo?.height)
-				return undefined;
-
-			return {
-				height: transactionInfo.height,
-				primaryId: transactionInfo.index + 1,
-				secondaryId: undefined === secondaryId ? 0 : secondaryId
-			};
-		};
+		const makeTransactionLocation = (transactionInfo, secondaryId = undefined) => ({
+			height: transactionInfo.height,
+			primaryId: transactionInfo.index + 1,
+			secondaryId: undefined === secondaryId ? 0 : secondaryId
+		});
 
 		const addUnresolvedMosaic = (mosaicId, transactionLocation) => {
 			unresolvedMosaics.push({

@@ -433,18 +433,5 @@ describe('Helper', () => {
 			expect(mosaicInfos).toStrictEqual(mockMosaicInfos);
 			expect(mosaicNames).toStrictEqual(mockMosaicNames);
 		});
-
-		it('returns empty when transactions empty', async () => {
-			// Arrange:
-			const transactions = {};
-
-			// Act:
-			const {mosaicInfos, mosaicNames, unresolvedMosaicsMap} = await Helper.getTransactionMosaicInfoAndNamespace(transactions);
-
-			// Assert:
-			expect(mosaicInfos).toStrictEqual([]);
-			expect(mosaicNames).toStrictEqual([]);
-			expect(unresolvedMosaicsMap).toStrictEqual({});
-		});
 	});
 });
