@@ -182,6 +182,24 @@ describe('Helper', () => {
 				.resolves(Promise.resolve(new MosaicId(mockTestMosaic.idHex)));
 		});
 
+		const createMockMosaicResolutionStatements = primaryId => ({
+			data: [{
+				height: UInt64.fromUint(10),
+				mosaicResolutionEntries: ['22D2D90A27738AA0'],
+				resolutionEntries: [
+					{
+						resolved: new MosaicId('22D2D90A27738AA0'),
+						source: {
+							primaryId,
+							secondaryId: 0
+						}
+					}
+				],
+				resolutionType: 'Mosaic',
+				unresolved: 'C6D6C5A3883DF4F4'
+			}]
+		});
+
 		afterEach(restore);
 
 		it('returns id given MosaicId', async () => {
@@ -225,23 +243,7 @@ describe('Helper', () => {
 			const mockNamespaceId = new NamespaceId(mockTestMosaic.namespaceName);
 
 			const stubSearchMosaicResolutionStatements = jest.spyOn(ReceiptService, 'searchMosaicResolutionStatements')
-				.mockReturnValue(Promise.resolve({
-					data: [{
-						height: UInt64.fromUint(10),
-						mosaicResolutionEntries: ['22D2D90A27738AA0'],
-						resolutionEntries: [
-							{
-								resolved: new MosaicId('22D2D90A27738AA0'),
-								source: {
-									primaryId: 0,
-									secondaryId: 0
-								}
-							}
-						],
-						resolutionType: 'Mosaic',
-						unresolved: 'C6D6C5A3883DF4F4'
-					}]
-				}));
+				.mockReturnValue(Promise.resolve(createMockMosaicResolutionStatements(0)));
 
 			// Act:
 			const result = await Helper.resolveMosaicId(mockNamespaceId, {
@@ -256,6 +258,21 @@ describe('Helper', () => {
 			expect(stubSearchMosaicResolutionStatements).toHaveBeenCalledWith({
 				height: UInt64.fromUint(10)
 			});
+		});
+
+		it('throws error when mosaic id is not found', async () => {
+			// Arrange:
+			const mockNamespaceId = new NamespaceId(mockTestMosaic.namespaceName);
+
+			jest.spyOn(ReceiptService, 'searchMosaicResolutionStatements')
+				.mockReturnValue(Promise.resolve(createMockMosaicResolutionStatements(2)));
+
+			// Act: + Assert:
+			await expect(Helper.resolveMosaicId(mockNamespaceId, {
+				height: UInt64.fromUint(10),
+				primaryId: 1,
+				secondaryId: 0
+			})).rejects.toThrow('Failed to resolve mosaic id');
 		});
 	});
 

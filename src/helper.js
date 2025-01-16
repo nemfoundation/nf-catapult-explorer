@@ -590,6 +590,8 @@ class helper {
 				for (const entry of statement.resolutionEntries) {
 					if (isReceiptSourceLessThanEqual(entry.source, transactionLocation))
 						return entry.resolved;
+					else
+						throw new Error('Failed to resolve mosaic id');
 				}
 			}
 		}
